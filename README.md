@@ -8,7 +8,8 @@
 5. [Usage](#usage)
 6. [License](#license)
 7. [Contact](#contact)
-8. [Examples](#examples)
+8. [For Beginners](#for-beginners)
+9. [Examples](#examples)
 
 ## Description
 iDiff is a simple tool for comparing two lists of usernames or general items. It identifies elements that appear in the second list but are missing from the first. Additionally, it can parse Instagram `<div>` elements to extract usernames automatically, making it especially useful for comparing Instagram followers.
