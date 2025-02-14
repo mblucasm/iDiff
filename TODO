@@ -1,0 +1,3 @@
+- Only parses div in ENGLISH, change that
+- Add support for Instagram downloaded data
+- Change the way lists are stored
