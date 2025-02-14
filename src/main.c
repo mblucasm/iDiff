@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
     }
 
     for(size_t i = 0; i < NFILES; ++i) {
-        size_t len = printf("==== LIST %lld (%lld INSTANCES) ====\n", i + 1, arrlenu(lists[i]));
+        size_t len = printf("==== LIST %llu (%llu INSTANCES) ====\n", i + 1, arrlenu(lists[i]));
         if(args.get_lists[i]) list_print(lists[i]);
         for(size_t j = 0; j < len - 1; ++j) printf("=");
         printf("\n\n");
@@ -102,9 +102,9 @@ int main(int argc, char **argv) {
     Dict *dict = dict_from_list(lists[0]);
     printf("===================NOT MATCHING LIST===================\n");
     size_t count = 0;
-    for(size_t i = 0; i < arrlenu(lists[1]); ++i) if(shgeti(dict, lists[1][i]) == -1) printf("%lld >> %s\n", ++count, lists[1][i]);
+    for(size_t i = 0; i < arrlenu(lists[1]); ++i) if(shgeti(dict, lists[1][i]) == -1) printf("%llu >> %s\n", ++count, lists[1][i]);
     printf("=================NOT MATCHING LIST END=================\n");
-    printf("-> Number of users that didn't match = %lld\n", count);
+    printf("-> Number of users that didn't match = %llu\n", count);
 
     shfree(dict);
     for(size_t i = 0; i < NFILES; ++i) list_free(lists[i]);
@@ -192,7 +192,7 @@ void list_free(char **list) {
 }
 
 void list_print(char **list) {
-    for(size_t i = 0; i < arrlenu(list); ++i) printf("%lld >> %s\n", i + 1, list[i]);
+    for(size_t i = 0; i < arrlenu(list); ++i) printf("%llu >> %s\n", i + 1, list[i]);
 }
 
 char *arg_shift(int *argc, char ***argv) {

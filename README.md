@@ -20,7 +20,7 @@ iDiff is a simple tool for comparing two lists of usernames or general items. It
 - Display missing users/items in a clean format.
 
 ## Requirements
-- A C compiler (GCC, Clang, etc.).
+- A C compiler (GCC, Clang, etc.). (Project has been tested with gcc.exe (GCC) 13.2.0. With version 6.X program didn't work)
 - `stb_ds.h` (included in the project).
 
 ## Installation
