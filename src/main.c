@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
     }
 
     for(size_t i = 0; i < NFILES; ++i) {
-        size_t len = printf("==== LIST %lld (%lld USERS) ====\n", i + 1, arrlenu(lists[i]));
+        size_t len = printf("==== LIST %lld (%lld INSTANCES) ====\n", i + 1, arrlenu(lists[i]));
         if(args.get_lists[i]) list_print(lists[i]);
         for(size_t j = 0; j < len - 1; ++j) printf("=");
         printf("\n\n");
