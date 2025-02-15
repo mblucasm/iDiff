@@ -1,6 +1,8 @@
 #ifndef ERROR_H
 #define ERROR_H
 
+#include <errno.h>
+
 #define __esettgoto(error, type, label) do {esett(error, type); goto label;} while(0)
 #define __esetgoto(error, type, label) do {eset(error, type, filePath, strerror(errno)); goto label;} while(0)
 
