@@ -1,2 +1,6 @@
-- Only parses div in ENGLISH, change that
-- Update README.md, iDiff now supports the Instagram <html> followers/ing files 
+- Update README.md, iDiff now supports the Instagram <html> followers/ing files
+- Change sfind: for(size_t i = 0; i < hayStack.len - needle.len; ++i) maybe?
+- Add support to --instagram-folder=<folder_path>
+- Change the iDiff comments on main.c
+- Maybe free and close things on elog, maybe on quit
+- Homogenize code

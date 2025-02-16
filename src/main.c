@@ -30,6 +30,7 @@
 #define DEFAULT_STREAM1 ("iDiff-list1.txt")
 #define DEFAULT_STREAM2 ("iDiff-list2.txt")
 
+#define FLAG_HELP     ("--help")
 #define FLAG_GETLIST  ("--get-list-")
 #define FLAG_DETAHELP ("--detailed-help")
 #define FLAG_GETLISTLEN (sizeof(FLAG_GETLIST) / sizeof(FLAG_GETLIST[0]) - 1)
@@ -52,8 +53,8 @@ typedef struct {
 } Buf;
 
 Buf buf_from_file_raw(const char *file_contents, size_t file_len, FILE *stream);
-Buf buf_from_file_html(const char *file_contents, size_t file_len, FILE *stream);
 Buf buf_from_file_div(const char *file_contents, size_t file_len, FILE *stream);
+Buf buf_from_file_html(const char *file_contents, size_t file_len, FILE *stream);
 bool bufput(Buf *buf, Slice slice);
 char *bufapp(Buf *buf, Slice slice);
 void buffree(Buf *buf);
@@ -65,17 +66,26 @@ typedef struct {
 
 Dict *dict_from_buf(Buf buf);
 
+typedef enum {
+    PREFIX_NONE,
+    PREFIX_HTML,
+    PREFIX_DIV,
+} Prefix;
+
+Prefix get_prefix(const char *buffer, size_t len);
+
+size_t compar_to_file_raw(Dict *dict, const char *file_contents, size_t file_len, FILE *stream);
+size_t compar_to_file_div(Dict *dict, const char *file_contents, size_t file_len, FILE *stream);
+size_t compar_to_file_html(Dict *dict, const char *file_contents, size_t file_len, FILE *stream);
+
+size_t maxst(size_t a, size_t b);
+char *file_read(const char *filePath, size_t *readedLen, Error *error);
+bool starts_with(const char *buffer, size_t len, char *prefix, size_t plen);
+void div_ensure_english(Slice contents);
 void usage(void);
 void detahelp(void);
 void elog(Error error);
 void quit(int code);
-
-size_t compar_to_file_raw(Dict *dict, const char *file_contents, size_t file_len, FILE *stream);
-size_t compar_to_file_html(Dict *dict, const char *file_contents, size_t file_len, FILE *stream);
-size_t compar_to_file_div(Dict *dict, const char *file_contents, size_t file_len, FILE *stream);
-char *file_read(const char *filePath, size_t *readedLen, Error *error);
-bool starts_with(const char *buffer, size_t len, char *prefix, size_t plen);
-size_t maxst(size_t a, size_t b);
 
 // iDiff - Instagram User and List Difference Finder
 // 
@@ -89,13 +99,6 @@ size_t maxst(size_t a, size_t b);
 // - Display missing users/items in a clean format.
 // 
 // Uses the stb_ds.h library for hash tables.
-
-typedef enum {PREFIX_NONE, PREFIX_HTML, PREFIX_DIV} Prefix;
-Prefix get_prefix(const char *buffer, size_t len) {
-    if(starts_with(buffer, len, PREF_HTML, strlen(PREF_HTML))) return PREFIX_HTML;
-    if(starts_with(buffer, len, PREF_DIV, strlen(PREF_DIV))) return PREFIX_DIV;
-    return PREFIX_NONE;
-}
 
 int main(int argc, char **argv) {
     
@@ -145,7 +148,7 @@ void quit(int code) {
 
 void detahelp(void) {
     printf("\nThis program tells the USER wich instances appear in file2 but not in file1\n");
-    printf("Supports the following formats of file:\n");
+    printf("Supports the following formats of file:\n\n");
     printf("  - Either a list of users (raw). Each line of the file corresponds to a user, for example\n");
     printf("      instance1\n");
     printf("      instance2\n");
@@ -155,18 +158,19 @@ void detahelp(void) {
     printf("      [%%s]>> instance1\n");
     printf("      [%%s]>> instance2\n");
     printf("      [%%s]>> instance3\n");
-    printf("      ...\n");
+    printf("      ...\n\n");
+    printf("  - The <html> of followers/ing (specific for Instagram). Go to Instagram, and download your data\n");
+    printf("    You don't need to dowload all of your data, you can specify only followers/ing and a time period (All time recommended)\n\n");
     printf("  - The <div> element containing the users (specific for Instagram). Go to Instagram, inspect the your followers/ing\n");
     printf("    and copy the hole div that contains them, just them (loading them first is required).\n");
     printf("    Read the README.md file for more detail\n");
-    printf("  - The <html> of followers/ing (specific for Instagram). Go to Instagram, download your data, only followers/ing works\n");
-    printf("    and use the generated files with this program\n");
 }
 
 void usage(void) {
     printf(">> Usage:\n");
-    printf("."DELIM"idiff <file1> <file2> [%s1[=<path>]] [%s2[=<path>]] [%s]\n\n", FLAG_GETLIST, FLAG_GETLIST, FLAG_DETAHELP);
-    printf("  %s    print the help message\n", FLAG_DETAHELP);
+    printf("."DELIM"idiff <file1> <file2> [%s1[=<path>]] [%s2[=<path>]] [%s] [%s]\n\n", FLAG_GETLIST, FLAG_GETLIST, FLAG_HELP, FLAG_DETAHELP);
+    printf("  %s             print this help message and quit\n", FLAG_HELP);
+    printf("  %s    print the detailed help message and quit\n", FLAG_DETAHELP);
     printf("  %s1       get the list 1 of instances, if followed by =<path> to a custom path (default %s)\n", FLAG_GETLIST, DEFAULT_STREAMS[0]);
     printf("  %s2       get the list 2 of instances, if followed by =<path> to a custom path (default %s)\n", FLAG_GETLIST, DEFAULT_STREAMS[1]);
 }
@@ -228,8 +232,8 @@ FILE *get_list_stream(Slice arg, const char *default_stream) {
     }
     FILE *f = fopen(path, "wb");
     if(f == NULL) {
-        fprintf(stderr, "[ERROR]: Coundn't open file %s that was specified as a path with %.*s", path, (int)arg.len, arg.ptr);
-        fprintf(stderr, "[ERROR]: The reason is: %s\n", strerror(errno));
+        fprintf(stderr, "[ERROR]: Coundn't open file '%s' that was specified as a path with %.*s\n", path, (int)arg.len, arg.ptr);
+        fprintf(stderr, "[ERROR]: The reason is: '%s'\n", strerror(errno));
     } return f;
 }
 
@@ -239,6 +243,7 @@ Args args_parse(int *argc, char ***argv) {
     while(*argc > 0) {
         Slice arg = snew(arg_shift(argc, argv));
         if(strcmp(arg.ptr, FLAG_DETAHELP) == 0) {usage(); detahelp(); quit(0);}
+        else if(strcmp(arg.ptr, FLAG_HELP) == 0) {usage(); quit(0);}
         else if(starts_with(arg.ptr, arg.len, FLAG_GETLIST, FLAG_GETLISTLEN)) {
             if(!(arg.len == FLAG_GETLISTLEN || (arg.ptr[FLAG_GETLISTLEN] != '1' && arg.ptr[FLAG_GETLISTLEN] != '2'))) {
                 int target = arg.ptr[FLAG_GETLISTLEN] - '1';
@@ -353,6 +358,7 @@ Buf buf_from_file_div(const char *file_contents, size_t file_len, FILE *stream) 
     size_t count = 0;
     Slice aeq = snew("alt=\"");
     Slice slice = snewl(file_contents, file_len);
+    div_ensure_english(slice);
     while(slice.len > 0) {
         (void)sslices(&slice, aeq, true);
         Slice name = strim(sslice(&slice, '\'', true));
@@ -407,6 +413,7 @@ size_t compar_to_file_div(Dict *dict, const char *file_contents, size_t file_len
     size_t count2 = 0;
     Slice aeq = snew("alt=\"");
     Slice slice = snewl(file_contents, file_len);
+    div_ensure_english(slice);
     while(slice.len > 0) {
         (void)sslices(&slice, aeq, true);
         Slice name = strim(sslice(&slice, '\'', true));
@@ -417,4 +424,20 @@ size_t compar_to_file_div(Dict *dict, const char *file_contents, size_t file_len
         }
     } buffree(&buf);
     return count;
+}
+
+Prefix get_prefix(const char *buffer, size_t len) {
+    if(starts_with(buffer, len, PREF_HTML, strlen(PREF_HTML))) return PREFIX_HTML;
+    if(starts_with(buffer, len, PREF_DIV, strlen(PREF_DIV))) return PREFIX_DIV;
+    return PREFIX_NONE;
+}
+
+void div_ensure_english(Slice contents) {
+    if(!sfind(contents, snew("'s profile picture"), NULL)) {
+        fprintf(stderr, "[ERROR]: Error while parsing <div> file\n");
+        fprintf(stderr, "[ERROR]: Seems like your Instagram's language is NOT English\n");
+        fprintf(stderr, "[ERROR]: Please try switching it to English in settings and try again or try other file formats %s\n\n", FLAG_DETAHELP);
+        fprintf(stderr, "[NOTE]: It could also be that no followers/ing where present on that <div> file...\n");
+        quit(1);
+    }
 }
