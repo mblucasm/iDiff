@@ -165,7 +165,7 @@ void detahelp(void) {
 
 void usage(void) {
     printf(">> Usage:\n");
-    printf("."DELIM"idiff <file1> <file2> [%s] [%s1[=<path>]] [%s2[=<path>]]\n\n", FLAG_GETLIST, FLAG_GETLIST, FLAG_DETAHELP);
+    printf("."DELIM"idiff <file1> <file2> [%s1[=<path>]] [%s2[=<path>]] [%s]\n\n", FLAG_GETLIST, FLAG_GETLIST, FLAG_DETAHELP);
     printf("  %s    print the help message\n", FLAG_DETAHELP);
     printf("  %s1       get the list 1 of instances, if followed by =<path> to a custom path (default %s)\n", FLAG_GETLIST, DEFAULT_STREAMS[0]);
     printf("  %s2       get the list 2 of instances, if followed by =<path> to a custom path (default %s)\n", FLAG_GETLIST, DEFAULT_STREAMS[1]);
