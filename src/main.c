@@ -27,19 +27,19 @@
 #define PREF_DIV  ("<div")
 #define PREF_HTML ("<html>")
 
-#define FLAG_GETLIST1 ("--get-list-1")
-#define FLAG_GETLIST2 ("--get-list-2")
+#define DEFAULT_STREAM1 ("iDiff-list1.txt")
+#define DEFAULT_STREAM2 ("iDiff-list2.txt")
+
+#define FLAG_GETLIST  ("--get-list-")
 #define FLAG_DETAHELP ("--detailed-help")
+#define FLAG_GETLISTLEN (sizeof(FLAG_GETLIST) / sizeof(FLAG_GETLIST[0]) - 1)
+
+const char * const DEFAULT_STREAMS[2] = {DEFAULT_STREAM1, DEFAULT_STREAM2};
 
 typedef struct {
-    FILE *stream;
-    bool print;
-} ListOut;
-
-typedef struct {
-    ListOut lo[NFILES];
     const char *program;
     const char *paths[NFILES];
+    FILE *list_streams[NFILES];
 } Args;
 
 Args args_parse(int *argc, char ***argv);
@@ -51,9 +51,9 @@ typedef struct {
     size_t cap;
 } Buf;
 
-Buf buf_from_file_raw(const char *file_contents, size_t file_len, ListOut lo);
-Buf buf_from_file_html(const char *file_contents, size_t file_len, ListOut lo);
-Buf buf_from_file_div(const char *file_contents, size_t file_len, ListOut lo);
+Buf buf_from_file_raw(const char *file_contents, size_t file_len, FILE *stream);
+Buf buf_from_file_html(const char *file_contents, size_t file_len, FILE *stream);
+Buf buf_from_file_div(const char *file_contents, size_t file_len, FILE *stream);
 bool bufput(Buf *buf, Slice slice);
 char *bufapp(Buf *buf, Slice slice);
 void buffree(Buf *buf);
@@ -70,9 +70,9 @@ void detahelp(void);
 void elog(Error error);
 void quit(int code);
 
-size_t compar_to_file_raw(Dict *dict, const char *file_contents, size_t file_len);
-size_t compar_to_file_html(Dict *dict, const char *file_contents, size_t file_len);
-size_t compar_to_file_div(Dict *dict, const char *file_contents, size_t file_len);
+size_t compar_to_file_raw(Dict *dict, const char *file_contents, size_t file_len, FILE *stream);
+size_t compar_to_file_html(Dict *dict, const char *file_contents, size_t file_len, FILE *stream);
+size_t compar_to_file_div(Dict *dict, const char *file_contents, size_t file_len, FILE *stream);
 char *file_read(const char *filePath, size_t *readedLen, Error *error);
 bool starts_with(const char *buffer, size_t len, char *prefix, size_t plen);
 size_t maxst(size_t a, size_t b);
@@ -90,6 +90,13 @@ size_t maxst(size_t a, size_t b);
 // 
 // Uses the stb_ds.h library for hash tables.
 
+typedef enum {PREFIX_NONE, PREFIX_HTML, PREFIX_DIV} Prefix;
+Prefix get_prefix(const char *buffer, size_t len) {
+    if(starts_with(buffer, len, PREF_HTML, strlen(PREF_HTML))) return PREFIX_HTML;
+    if(starts_with(buffer, len, PREF_DIV, strlen(PREF_DIV))) return PREFIX_DIV;
+    return PREFIX_NONE;
+}
+
 int main(int argc, char **argv) {
     
     Args args = args_parse(&argc, &argv);
@@ -101,27 +108,32 @@ int main(int argc, char **argv) {
     if(!file_contents) elog(error);
     
     Buf buf;
-    if(starts_with(file_contents, file_len, PREF_HTML, strlen(PREF_HTML))) buf = buf_from_file_html(file_contents, file_len, args.lo[0]);
-    else if(starts_with(file_contents, file_len, PREF_DIV, strlen(PREF_DIV))) buf = buf_from_file_div(file_contents, file_len, args.lo[0]);
-    else buf = buf_from_file_raw(file_contents, file_len, args.lo[0]);
-    free(file_contents);
+    Prefix pref = get_prefix(file_contents, file_len);
+    switch(pref) {
+        case PREFIX_NONE: buf = buf_from_file_raw(file_contents, file_len, args.list_streams[0]); break;
+        case PREFIX_HTML: buf = buf_from_file_html(file_contents, file_len, args.list_streams[0]); break;
+        case PREFIX_DIV:  buf = buf_from_file_div(file_contents, file_len, args.list_streams[0]); break;
+    } free(file_contents);
 
     Dict *dict = dict_from_buf(buf);
     file_contents = file_read(args.paths[1], &file_len, &error);
     if(!file_contents) elog(error);
     
-    size_t count;
     printf("===================NOT MATCHING LIST===================\n");
-    if(starts_with(file_contents, file_len, PREF_HTML, strlen(PREF_HTML))) count = compar_to_file_html(dict, file_contents, file_len);
-    else if(starts_with(file_contents, file_len, PREF_DIV, strlen(PREF_DIV))) count = compar_to_file_div(dict, file_contents, file_len);
-    else count = compar_to_file_raw(dict, file_contents, file_len);
+    size_t count = 0;
+    pref = get_prefix(file_contents, file_len);
+    switch(pref) {
+        case PREFIX_NONE: count = compar_to_file_raw(dict, file_contents, file_len, args.list_streams[1]); break;
+        case PREFIX_HTML: count = compar_to_file_html(dict, file_contents, file_len, args.list_streams[1]); break;
+        case PREFIX_DIV:  count = compar_to_file_div(dict, file_contents, file_len, args.list_streams[1]); break;
+    }
     printf("=================NOT MATCHING LIST END=================\n");
     printf("Total mismatches = %zu\n", count);
 
     free(file_contents);
     shfree(dict);
     buffree(&buf);
-    for(size_t i = 0; i < NFILES; ++i) if(args.lo[i].stream) fclose(args.lo[i].stream);
+    for(size_t i = 0; i < NFILES; ++i) if(args.list_streams[i]) fclose(args.list_streams[i]);
     quit(0);
     return 0;
 }
@@ -144,17 +156,19 @@ void detahelp(void) {
     printf("      [%%s]>> instance2\n");
     printf("      [%%s]>> instance3\n");
     printf("      ...\n");
-    printf("  - Or the <div> element containing the users (specific for Instagram). Go to Instagram, inspect the your followers/ing\n");
+    printf("  - The <div> element containing the users (specific for Instagram). Go to Instagram, inspect the your followers/ing\n");
     printf("    and copy the hole div that contains them, just them (loading them first is required).\n");
     printf("    Read the README.md file for more detail\n");
+    printf("  - The <html> of followers/ing (specific for Instagram). Go to Instagram, download your data, only followers/ing works\n");
+    printf("    and use the generated files with this program\n");
 }
 
 void usage(void) {
     printf(">> Usage:\n");
-    printf("."DELIM"idiff <file1> <file2> [%s] [%s] [%s]\n\n", FLAG_GETLIST1, FLAG_GETLIST2, FLAG_DETAHELP);
+    printf("."DELIM"idiff <file1> <file2> [%s] [%s1[=<path>]] [%s2[=<path>]]\n\n", FLAG_GETLIST, FLAG_GETLIST, FLAG_DETAHELP);
     printf("  %s    print the help message\n", FLAG_DETAHELP);
-    printf("  %s       get the list 1 of instances\n", FLAG_GETLIST1);
-    printf("  %s       get the list 2 of instances\n", FLAG_GETLIST2);
+    printf("  %s1       get the list 1 of instances, if followed by =<path> to a custom path (default %s)\n", FLAG_GETLIST, DEFAULT_STREAMS[0]);
+    printf("  %s2       get the list 2 of instances, if followed by =<path> to a custom path (default %s)\n", FLAG_GETLIST, DEFAULT_STREAMS[1]);
 }
 
 bool starts_with(const char *buffer, size_t len, char *prefix, size_t plen) {
@@ -199,33 +213,49 @@ char *file_read(const char *filePath, size_t *readedLen, Error *error) {
         return buffer;
 }
 
+FILE *get_list_stream(Slice arg, const char *default_stream) {
+    const char *path = default_stream;
+    if(FLAG_GETLISTLEN + 2 < arg.len) {
+        if(arg.ptr[FLAG_GETLISTLEN + 1] == '=') path = arg.ptr + FLAG_GETLISTLEN + 2;
+        else {
+            fprintf(stderr, "[ERROR]: %sX can only be followed by '=', got '%c' instead\n", FLAG_GETLIST, arg.ptr[FLAG_GETLISTLEN + 1]);
+            quit(1);
+        }
+    } else if(FLAG_GETLISTLEN + 2 == arg.len) {
+        if(arg.ptr[FLAG_GETLISTLEN + 1] == '=') fprintf(stderr, "[ERROR]: Expected a path after the '=' in %.*s\n", (int)arg.len, arg.ptr);
+        else fprintf(stderr, "[ERROR]: %sX can only be followed by '=', got '%c' instead\n", FLAG_GETLIST, arg.ptr[FLAG_GETLISTLEN + 1]);
+        quit(1);
+    }
+    FILE *f = fopen(path, "wb");
+    if(f == NULL) {
+        fprintf(stderr, "[ERROR]: Coundn't open file %s that was specified as a path with %.*s", path, (int)arg.len, arg.ptr);
+        fprintf(stderr, "[ERROR]: The reason is: %s\n", strerror(errno));
+    } return f;
+}
+
 Args args_parse(int *argc, char ***argv) {
     Args args = {0};
     args.program = arg_shift(argc, argv);
     while(*argc > 0) {
         Slice arg = snew(arg_shift(argc, argv));
         if(strcmp(arg.ptr, FLAG_DETAHELP) == 0) {usage(); detahelp(); quit(0);}
-        else if(starts_with(arg.ptr, arg.len, FLAG_GETLIST1, strlen(FLAG_GETLIST1))) {
-            args.lo[0].print = true;
-            (void)sslice(&arg, '=', true);
-            if(arg.len > 0) {
-                args.lo[0].stream = fopen(arg.ptr, "wb");
-                if(args.lo[0].stream == NULL) {fprintf(stderr, "[ERROR]: Unable to open %s : %s\n", arg.ptr, strerror(errno)); goto defer1;}
-            }
-        } else if(starts_with(arg.ptr, arg.len, FLAG_GETLIST2, strlen(FLAG_GETLIST2))) {
-            args.lo[1].print = true;
-            (void)sslice(&arg, '=', true);
-            if(arg.len > 0) {
-                args.lo[1].stream = fopen(arg.ptr, "wb");
-                if(args.lo[1].stream == NULL) {fprintf(stderr, "[ERROR]: Unable to open %s : %s\n", arg.ptr, strerror(errno)); goto defer2;}
+        else if(starts_with(arg.ptr, arg.len, FLAG_GETLIST, FLAG_GETLISTLEN)) {
+            if(!(arg.len == FLAG_GETLISTLEN || (arg.ptr[FLAG_GETLISTLEN] != '1' && arg.ptr[FLAG_GETLISTLEN] != '2'))) {
+                int target = arg.ptr[FLAG_GETLISTLEN] - '1';
+                if(args.list_streams[target]) fclose(args.list_streams[target]);
+                args.list_streams[target] = get_list_stream(arg, DEFAULT_STREAMS[target]);
+                if(args.list_streams[target] == NULL) goto defer;
+            } else {
+                fprintf(stderr, "[ERROR]: %s flag NEEDS to be followed by either a 1 or a 2: %s1 or %s2\n", FLAG_GETLIST, FLAG_GETLIST, FLAG_GETLIST);
+                fprintf(stderr, "[ERROR]: Aditionally it CAN be followed by =path, where path is the desired output path for that specific list\n");
+                quit(1);
             }
         } else if(!args.paths[0]) args.paths[0] = arg.ptr;
         else args.paths[1] = arg.ptr;
-    } 
+    }
     return args;
-    defer2:
-        if(args.lo[0].stream) fclose(args.lo[0].stream);
-    defer1:
+    defer:
+        for(size_t i = 0; i < NFILES; ++i) if(args.list_streams[i]) fclose(args.list_streams[i]);
         quit(1);
         return (Args){0};
 }
@@ -285,7 +315,7 @@ Dict *dict_from_buf(Buf buf) {
     } return dict;
 }
 
-Buf buf_from_file_raw(const char *file_contents, size_t file_len, ListOut lo) {
+Buf buf_from_file_raw(const char *file_contents, size_t file_len, FILE *stream) {
     Buf buf = {0};
     size_t count = 0;
     Slice slice = snewl(file_contents, file_len);
@@ -296,13 +326,13 @@ Buf buf_from_file_raw(const char *file_contents, size_t file_len, ListOut lo) {
         name = strim(name);
         if(name.len > 0) {
             char *dst = bufapp(&buf, name);
-            if(lo.print) fprintf(lo.stream ? lo.stream : stdout, "%zu >> %s\n", ++count, dst);
+            if(stream) fprintf(stream, "%zu >> %s\n", ++count, dst);
             if(!dst) {fprintf(stderr, "[ERROR]: Ran out of memory, list too long\n"); quit(1);}
         }
     } return buf;
 }
 
-Buf buf_from_file_html(const char *file_contents, size_t file_len, ListOut lo) {
+Buf buf_from_file_html(const char *file_contents, size_t file_len, FILE *stream) {
     Buf buf = {0};
     size_t count = 0;
     Slice dcs = snew(".com/");
@@ -312,13 +342,13 @@ Buf buf_from_file_html(const char *file_contents, size_t file_len, ListOut lo) {
         Slice name = strim(sslice(&slice, '"', true));
         if(name.len > 0) {
             char *dst = bufapp(&buf, name);
-            if(lo.print) fprintf(lo.stream ? lo.stream : stdout, "%zu >> %s\n", ++count, dst);
+            if(stream) fprintf(stream, "%zu >> %s\n", ++count, dst);
             if(!dst) {fprintf(stderr, "[ERROR]: Ran out of memory, list too long\n"); quit(1);}
         }
     } return buf;
 }
 
-Buf buf_from_file_div(const char *file_contents, size_t file_len, ListOut lo) {
+Buf buf_from_file_div(const char *file_contents, size_t file_len, FILE *stream) {
     Buf buf = {0};
     size_t count = 0;
     Slice aeq = snew("alt=\"");
@@ -328,15 +358,16 @@ Buf buf_from_file_div(const char *file_contents, size_t file_len, ListOut lo) {
         Slice name = strim(sslice(&slice, '\'', true));
         if(name.len > 0) {
             char *dst = bufapp(&buf, name);
-            if(lo.print) fprintf(lo.stream ? lo.stream : stdout, "%zu >> %s\n", ++count, dst);
+            if(stream) fprintf(stream, "%zu >> %s\n", ++count, dst);
             if(!dst) {fprintf(stderr, "[ERROR]: Ran out of memory, list too long\n"); quit(1);}
         }
     } return buf;
 }
 
-size_t compar_to_file_raw(Dict *dict, const char *file_contents, size_t file_len) {
+size_t compar_to_file_raw(Dict *dict, const char *file_contents, size_t file_len, FILE *stream) {
     Buf buf = {0};
     size_t count = 0;
+    size_t count2 = 0;
     Slice slice = snewl(file_contents, file_len);
     while(slice.len > 0) {
         Slice name = sslice(&slice, '\n', true);
@@ -345,15 +376,17 @@ size_t compar_to_file_raw(Dict *dict, const char *file_contents, size_t file_len
         name = strim(name);
         if(name.len > 0) {
             bufput(&buf, name);
+            if(stream) fprintf(stream, "%zu >> %s\n", ++count2, buf.buf);
             if(shgeti(dict, buf.buf) == -1) printf("%zu >> %.*s\n", ++count, (int)name.len, name.ptr);
         }
     } buffree(&buf);
     return count;
 }
 
-size_t compar_to_file_html(Dict *dict, const char *file_contents, size_t file_len) {
+size_t compar_to_file_html(Dict *dict, const char *file_contents, size_t file_len, FILE *stream) {
     Buf buf = {0};
     size_t count = 0;
+    size_t count2 = 0;
     Slice dcs = snew(".com/");
     Slice slice = snewl(file_contents, file_len);
     while(slice.len > 0) {
@@ -361,15 +394,17 @@ size_t compar_to_file_html(Dict *dict, const char *file_contents, size_t file_le
         Slice name = strim(sslice(&slice, '"', true));
         if(name.len > 0) {
             bufput(&buf, name);
+            if(stream) fprintf(stream, "%zu >> %s\n", ++count2, buf.buf);
             if(shgeti(dict, buf.buf) == -1) printf("%zu >> %.*s\n", ++count, (int)name.len, name.ptr);
         }
     } buffree(&buf);
     return count;
 }
 
-size_t compar_to_file_div(Dict *dict, const char *file_contents, size_t file_len) {
+size_t compar_to_file_div(Dict *dict, const char *file_contents, size_t file_len, FILE *stream) {
     Buf buf = {0};
     size_t count = 0;
+    size_t count2 = 0;
     Slice aeq = snew("alt=\"");
     Slice slice = snewl(file_contents, file_len);
     while(slice.len > 0) {
@@ -377,6 +412,7 @@ size_t compar_to_file_div(Dict *dict, const char *file_contents, size_t file_len
         Slice name = strim(sslice(&slice, '\'', true));
         if(name.len > 0) {
             bufput(&buf, name);
+            if(stream) fprintf(stream, "%zu >> %s\n", ++count2, buf.buf);
             if(shgeti(dict, buf.buf) == -1) printf("%zu >> %.*s\n", ++count, (int)name.len, name.ptr);
         }
     } buffree(&buf);
