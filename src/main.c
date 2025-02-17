@@ -42,6 +42,9 @@
 #define FLAG_IFOLDERLEN (sizeof(FLAG_IFOLDER) / sizeof(FLAG_IFOLDER[0]) - 1)
 #define FLAG_GETLISTLEN (sizeof(FLAG_GETLIST) / sizeof(FLAG_GETLIST[0]) - 1)
 
+#define IPATH ("/connections/followers_and_following/")
+#define IPATHLEN (sizeof(IPATH) / sizeof(IPATH[0]) - 1)
+
 const char * const DEFAULT_STREAMS[2] = {DEFAULT_STREAM1, DEFAULT_STREAM2};
 
 typedef struct {
@@ -67,6 +70,8 @@ bool bufput(Buf *buf, Slice slice);
 char *bufapp(Buf *buf, Slice slice);
 char *bufcat(Buf *buf, Slice slice);
 void buffree(Buf *buf);
+void replacec(char *buffer, size_t len, const char old, const char new);
+void args_get_paths_from_folder(const char *args_paths[NFILES], Slice folder);
 
 typedef struct {
     char *key;
@@ -178,7 +183,8 @@ void detahelp(void) {
 
 void usage(void) {
     printf(">> Usage:\n");
-    printf("."DELIM"idiff <file1> <file2> [%s1[=<path>]] [%s2[=<path>]] [%s] [%s]\n\n", FLAG_GETLIST, FLAG_GETLIST, FLAG_HELP, FLAG_DETAHELP);
+    printf("."DELIM"idiff <<file1> <file2> | %s<folder_path>> [options]\n\n", FLAG_IFOLDER);
+    printf("Options:\n");
     printf("  %s             print this help message and quit\n", FLAG_HELP);
     printf("  %s    print the detailed help message and quit\n", FLAG_DETAHELP);
     printf("  %s1       get the list 1 of instances, if followed by =<path> to a custom path (default %s)\n", FLAG_GETLIST, DEFAULT_STREAMS[0]);
@@ -247,20 +253,18 @@ FILE *get_list_stream(Slice arg, const char *default_stream) {
     } return f;
 }
 
-#define IPATH ("/connections/followers_and_following/")
-#define IPATHLEN (sizeof(IPATH) / sizeof(IPATH[0]) - 1)
-
 void replacec(char *buffer, size_t len, const char old, const char new) {
     for(size_t i = 0; i < len; ++i) if(buffer[i] == old) buffer[i] = new;
 }
 
 void args_get_paths_from_folder(const char *args_paths[NFILES], Slice folder) {
+    if(folder.ptr[folder.len - 1] == DELIMC || folder.ptr[folder.len - 1] == ANTIDELIMC) --folder.len;
     Buf buf1 = {0};
-    bufcat(&buf1, folder);
+    bufput(&buf1, folder);
     bufcat(&buf1, snewl(IPATH, IPATHLEN));
     bufcat(&buf1, snew("followers_1.html"));
     Buf buf2 = {0};
-    bufcat(&buf2, folder);
+    bufput(&buf2, folder);
     bufcat(&buf2, snewl(IPATH, IPATHLEN));
     bufcat(&buf2, snew("following.html"));
     replacec(buf1.buf, buf1.len, ANTIDELIMC, DELIMC);
