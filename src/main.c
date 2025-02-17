@@ -18,8 +18,12 @@
 
 #ifdef _WIN32
 #   define DELIM "\\"
+#   define DELIMC '\\'
+#   define ANTIDELIMC '/'
 #else
 #   define DELIM "/"
+#   define DELIMC '/'
+#   define ANTIDELIMC '\\'
 #endif
 
 #define NFILES    (2)
@@ -33,11 +37,15 @@
 #define FLAG_HELP     ("--help")
 #define FLAG_GETLIST  ("--get-list-")
 #define FLAG_DETAHELP ("--detailed-help")
+#define FLAG_IFOLDER  ("--instagram-folder=")
+
+#define FLAG_IFOLDERLEN (sizeof(FLAG_IFOLDER) / sizeof(FLAG_IFOLDER[0]) - 1)
 #define FLAG_GETLISTLEN (sizeof(FLAG_GETLIST) / sizeof(FLAG_GETLIST[0]) - 1)
 
 const char * const DEFAULT_STREAMS[2] = {DEFAULT_STREAM1, DEFAULT_STREAM2};
 
 typedef struct {
+    bool ifolder;
     const char *program;
     const char *paths[NFILES];
     FILE *list_streams[NFILES];
@@ -57,6 +65,7 @@ Buf buf_from_file_div(const char *file_contents, size_t file_len, FILE *stream);
 Buf buf_from_file_html(const char *file_contents, size_t file_len, FILE *stream);
 bool bufput(Buf *buf, Slice slice);
 char *bufapp(Buf *buf, Slice slice);
+char *bufcat(Buf *buf, Slice slice);
 void buffree(Buf *buf);
 
 typedef struct {
@@ -101,7 +110,7 @@ void quit(int code);
 // Uses the stb_ds.h library for hash tables.
 
 int main(int argc, char **argv) {
-    
+
     Args args = args_parse(&argc, &argv);
     if(!args.paths[0] || !args.paths[1]) {usage(); quit(1);}
     
@@ -136,6 +145,7 @@ int main(int argc, char **argv) {
     free(file_contents);
     shfree(dict);
     buffree(&buf);
+    if(args.ifolder) for(size_t i = 0; i < NFILES; ++i) free((char*)args.paths[i]);
     for(size_t i = 0; i < NFILES; ++i) if(args.list_streams[i]) fclose(args.list_streams[i]);
     quit(0);
     return 0;
@@ -161,7 +171,7 @@ void detahelp(void) {
     printf("      ...\n\n");
     printf("  - The <html> of followers/ing (specific for Instagram). Go to Instagram, and download your data\n");
     printf("    You don't need to dowload all of your data, you can specify only followers/ing and a time period (All time recommended)\n\n");
-    printf("  - The <div> element containing the users (specific for Instagram). Go to Instagram, inspect the your followers/ing\n");
+    printf("  - The <div> element containing the users (specific for Instagram). Go to Instagram, inspect your followers/ing\n");
     printf("    and copy the hole div that contains them, just them (loading them first is required).\n");
     printf("    Read the README.md file for more detail\n");
 }
@@ -237,21 +247,51 @@ FILE *get_list_stream(Slice arg, const char *default_stream) {
     } return f;
 }
 
+#define IPATH ("/connections/followers_and_following/")
+#define IPATHLEN (sizeof(IPATH) / sizeof(IPATH[0]) - 1)
+
+void replacec(char *buffer, size_t len, const char old, const char new) {
+    for(size_t i = 0; i < len; ++i) if(buffer[i] == old) buffer[i] = new;
+}
+
+void args_get_paths_from_folder(const char *args_paths[NFILES], Slice folder) {
+    Buf buf1 = {0};
+    bufcat(&buf1, folder);
+    bufcat(&buf1, snewl(IPATH, IPATHLEN));
+    bufcat(&buf1, snew("followers_1.html"));
+    Buf buf2 = {0};
+    bufcat(&buf2, folder);
+    bufcat(&buf2, snewl(IPATH, IPATHLEN));
+    bufcat(&buf2, snew("following.html"));
+    replacec(buf1.buf, buf1.len, ANTIDELIMC, DELIMC);
+    replacec(buf2.buf, buf2.len, ANTIDELIMC, DELIMC);
+    args_paths[0] = buf1.buf;
+    args_paths[1] = buf2.buf;
+}
+
 Args args_parse(int *argc, char ***argv) {
     Args args = {0};
     args.program = arg_shift(argc, argv);
     while(*argc > 0) {
         Slice arg = snew(arg_shift(argc, argv));
-        if(strcmp(arg.ptr, FLAG_DETAHELP) == 0) {usage(); detahelp(); quit(0);}
-        else if(strcmp(arg.ptr, FLAG_HELP) == 0) {usage(); quit(0);}
-        else if(starts_with(arg.ptr, arg.len, FLAG_GETLIST, FLAG_GETLISTLEN)) {
+        if(strcmp(arg.ptr, FLAG_HELP) == 0) {usage(); quit(0);}
+        else if(strcmp(arg.ptr, FLAG_DETAHELP) == 0) {usage(); detahelp(); quit(0);}
+        else if(starts_with(arg.ptr, arg.len, FLAG_IFOLDER, FLAG_IFOLDERLEN)) {
+            args.ifolder = true;
+            (void)sslice(&arg, '=', true);
+            if(arg.len > 0) args_get_paths_from_folder(args.paths, arg);
+            else {
+                fprintf(stderr, "[ERROR]: '%s' flag NEEDS to be followed by a folder path\n", FLAG_IFOLDER);
+                quit(1);
+            }
+        } else if(starts_with(arg.ptr, arg.len, FLAG_GETLIST, FLAG_GETLISTLEN)) {
             if(!(arg.len == FLAG_GETLISTLEN || (arg.ptr[FLAG_GETLISTLEN] != '1' && arg.ptr[FLAG_GETLISTLEN] != '2'))) {
                 int target = arg.ptr[FLAG_GETLISTLEN] - '1';
                 if(args.list_streams[target]) fclose(args.list_streams[target]);
                 args.list_streams[target] = get_list_stream(arg, DEFAULT_STREAMS[target]);
                 if(args.list_streams[target] == NULL) goto defer;
             } else {
-                fprintf(stderr, "[ERROR]: %s flag NEEDS to be followed by either a 1 or a 2: %s1 or %s2\n", FLAG_GETLIST, FLAG_GETLIST, FLAG_GETLIST);
+                fprintf(stderr, "[ERROR]: '%s' flag NEEDS to be followed by either a 1 or a 2: %s1 or %s2\n", FLAG_GETLIST, FLAG_GETLIST, FLAG_GETLIST);
                 fprintf(stderr, "[ERROR]: Aditionally it CAN be followed by =path, where path is the desired output path for that specific list\n");
                 quit(1);
             }
@@ -275,28 +315,6 @@ size_t maxst(size_t a, size_t b) {
     return a < b ? b : a;
 }
 
-char *bufapp(Buf *buf, Slice slice) {
-    if(buf->cap < buf->len + slice.len + 1) {
-        size_t newcap = buf->cap + maxst(BUFCAP, slice.len + 1);
-        char *dst = realloc(buf->buf, sizeof(char) * newcap);
-        if(dst == NULL) return NULL;
-        buf->cap = newcap;
-        buf->buf = dst;
-    } 
-    char *dst = buf->buf + (sizeof(char) * buf->len);
-    memcpy(dst, slice.ptr, sizeof(char) * slice.len);
-    buf->len += slice.len;
-    buf->buf[buf->len++] = '\0';
-    return dst;
-}
-
-void buffree(Buf *buf) {
-    free(buf->buf);
-    buf->buf = NULL;
-    buf->cap = 0;
-    buf->len = 0;
-}
-
 bool bufput(Buf *buf, Slice slice) {
     if(buf->cap < slice.len + 1) {
         size_t newcap = buf->cap + maxst(BUFCAP, slice.len + 1);
@@ -309,6 +327,43 @@ bool bufput(Buf *buf, Slice slice) {
     buf->len = slice.len;
     buf->buf[buf->len] = '\0';
     return true;
+}
+
+char *bufapp(Buf *buf, Slice slice) {
+    if(buf->cap < buf->len + 1 + slice.len + 1) {
+        size_t newcap = buf->cap + maxst(BUFCAP, 1 + slice.len + 1);
+        char *dst = realloc(buf->buf, sizeof(char) * newcap);
+        if(dst == NULL) return NULL;
+        buf->cap = newcap;
+        buf->buf = dst;
+    } 
+    char *dst = buf->buf + (sizeof(char) * (buf->len + (buf->len != 0)));
+    memcpy(dst, slice.ptr, sizeof(char) * slice.len);
+    buf->len += slice.len + (buf->len != 0);
+    buf->buf[buf->len] = '\0';
+    return dst;
+}
+
+char *bufcat(Buf *buf, Slice slice) {
+    if(buf->cap < buf->len + slice.len + 1) {
+        size_t newcap = buf->cap + maxst(BUFCAP, slice.len + 1);
+        char *dst = realloc(buf->buf, sizeof(char) * newcap);
+        if(dst == NULL) return NULL;
+        buf->cap = newcap;
+        buf->buf = dst;
+    } 
+    char *dst = buf->buf + (sizeof(char) * buf->len);
+    memcpy(dst, slice.ptr, sizeof(char) * slice.len);
+    buf->len += slice.len;
+    buf->buf[buf->len] = '\0';
+    return dst;
+}
+
+void buffree(Buf *buf) {
+    free(buf->buf);
+    buf->buf = NULL;
+    buf->cap = 0;
+    buf->len = 0;
 }
 
 Dict *dict_from_buf(Buf buf) {
