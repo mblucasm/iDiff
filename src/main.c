@@ -150,8 +150,8 @@ int main(int argc, char **argv) {
     free(file_contents);
     shfree(dict);
     buffree(&buf);
-    if(args.ifolder) for(size_t i = 0; i < NFILES; ++i) free((char*)args.paths[i]);
     for(size_t i = 0; i < NFILES; ++i) if(args.list_streams[i]) fclose(args.list_streams[i]);
+    if(args.ifolder) for(size_t i = 0; i < NFILES; ++i) free((char*)args.paths[i]);
     quit(0);
     return 0;
 }

@@ -5,4 +5,6 @@
 - Make args global
 - Make error a global settable variable, make functions return bool to indicate failure
 - Make file_read set the error.info[0] or file_path at the beginning so on ERROR_MALLOC we get info about the file also
+- Check for leaks fclose, free, ...
+- Make so --args get recognized as so and don't get treated as files if not typed correctly
 - Homogenize code
