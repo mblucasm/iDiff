@@ -1,4 +1,3 @@
-- Implement bufcatmany
 - README.md needs to explain how the usage is presented to beginners, examples, tell that program can also be used to check you unfollowed you, who you recently followed... Anything you can imagine
 - Change the iDiff comments on main.c
 - Change sfind: for(size_t i = 0; i < hayStack.len - needle.len; ++i) maybe?
