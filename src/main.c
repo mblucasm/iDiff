@@ -304,7 +304,7 @@ void args_parse(int *argc, char ***argv) {
             }
         } else if(!gargs.paths[0]) gargs.paths[0] = arg.ptr;
         else gargs.paths[1] = arg.ptr;
-    }
+    } return;
     defer:
         for(size_t i = 0; i < NFILES; ++i) if(gargs.list_streams[i]) fclose(gargs.list_streams[i]);
         quit(1);
