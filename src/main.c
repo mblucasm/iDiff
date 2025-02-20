@@ -96,7 +96,7 @@ size_t compar_to_file_div(Dict *dict, const char *file_contents, size_t file_len
 size_t compar_to_file_html(Dict *dict, const char *file_contents, size_t file_len, FILE *stream);
 
 size_t maxst(size_t a, size_t b);
-char *file_read(const char *filePath, size_t *readedLen, Error *error);
+char *file_read(const char *filePath, size_t *readedLen);
 bool starts_with(const char *buffer, size_t len, char *prefix, size_t plen);
 void div_ensure_english(Slice contents);
 void usage(void);
@@ -119,6 +119,7 @@ void replacec(char *buffer, size_t len, const char old, const char new);
 // Uses the stb_ds.h library for hash tables.
 
 const char * const DEFAULT_STREAMS[2] = {DEFAULT_STREAM1, DEFAULT_STREAM2};
+Error gerror = {0};
 Args gargs = {0};
 
 int main(int argc, char **argv) {
@@ -126,10 +127,9 @@ int main(int argc, char **argv) {
     args_parse(&argc, &argv);
     if(!gargs.paths[0] || !gargs.paths[1]) {usage(); quit(1);}
     
-    Error error;
     size_t file_len;
-    char *file_contents = file_read(gargs.paths[0], &file_len, &error);
-    if(!file_contents) elog(error);
+    char *file_contents = file_read(gargs.paths[0], &file_len);
+    if(!file_contents) elog(gerror);
     
     Buf buf;
     Prefix pref = get_prefix(file_contents, file_len);
@@ -140,8 +140,8 @@ int main(int argc, char **argv) {
     } free(file_contents);
 
     Dict *dict = dict_from_buf(buf);
-    file_contents = file_read(gargs.paths[1], &file_len, &error);
-    if(!file_contents) elog(error);
+    file_contents = file_read(gargs.paths[1], &file_len);
+    if(!file_contents) elog(gerror);
     
     printf("===================NOT MATCHING LIST===================\n");
     size_t count = 0;
@@ -213,8 +213,8 @@ char *arg_shift(int *argc, char ***argv) {
     } return arg;
 }
 
-char *file_read(const char *filePath, size_t *readedLen, Error *error) {
-    if(error) *error = ((Error){0});
+char *file_read(const char *filePath, size_t *readedLen) {
+    eset(&gerror, ERROR_NO_ERROR, filePath, NULL);
     FILE *f = fopen(filePath, "rb");
     char *buffer = NULL;
     if(f) {
@@ -222,15 +222,15 @@ char *file_read(const char *filePath, size_t *readedLen, Error *error) {
             size_t len = ftell(f);
             rewind(f);
             buffer = malloc(sizeof(char) * (len + 1));
-            if(buffer == NULL) __esettgoto(error, ERROR_MALLOC, defer1);
+            if(buffer == NULL) esettgoto(&gerror, ERROR_MALLOC, defer1);
             size_t readed_len;
             if((readed_len = fread(buffer, sizeof(char), len, f)) == len) {
                 buffer[len] = '\0';
                 if(readedLen) *readedLen = len;
-            } else __esetgoto(error, ERROR_FREAD, defer2);
-        } else __esetgoto(error, ERROR_FSEEK, defer1);
+            } else esetgoto(&gerror, ERROR_FREAD, filePath, strerror(errno), defer2);
+        } else esetgoto(&gerror, ERROR_FSEEK, filePath, strerror(errno), defer1);
         fclose(f);
-    } else eset(error, ERROR_OPENING_FILE, filePath, strerror(errno));
+    } else eset(&gerror, ERROR_OPENING_FILE, filePath, strerror(errno));
     return buffer;
     defer2:
         free(buffer);

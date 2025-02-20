@@ -1,9 +1,7 @@
 - README.md needs to explain how the usage is presented to beginners, examples, tell that program can also be used to check you unfollowed you, who you recently followed... Anything you can imagine
 - Change the iDiff comments on main.c
-- Change sfind: for(size_t i = 0; i < hayStack.len - needle.len; ++i) maybe?
 - Maybe free and close things on elog, maybe on quit
-- Make error a global settable variable, make functions return bool to indicate failure
-- Make file_read set the error.info[0] or file_path at the beginning so on ERROR_MALLOC we get info about the file also
+- Make functions return bool to indicate failure
 - Check for leaks fclose, free, ...
 - Make so --args get recognized as so and don't get treated as files if not typed correctly
 - Homogenize code

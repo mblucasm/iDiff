@@ -30,9 +30,8 @@ Slice sslice(Slice *s, const char delim, bool skipDelim) {
 
 bool sfind(Slice hayStack, Slice needle, size_t *idx) {
     if(needle.len > hayStack.len) return false;
-    for(size_t i = 0; i < hayStack.len; ++i) {
+    for(size_t i = 0; i < hayStack.len - needle.len + 1; ++i) {
         if(hayStack.ptr[i] == needle.ptr[0]) {
-            if(needle.len > hayStack.len - i) return false;
             if(seq(snewl(hayStack.ptr + i, needle.len), needle)) {
                 if(idx) *idx = i;
                 return true;

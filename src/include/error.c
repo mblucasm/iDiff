@@ -1,16 +1,14 @@
 #include "error.h"
 #include <assert.h>
 
-void eset(Error *error, ErrorType type, const char *filePath, const char *msg) {
-    if(error) {
-        error->type = type;
-        error->info[0] = filePath;
-        error->info[1] = msg;
-    }
+void eset(Error *error, ErrorType type, const char *info0, const char *info1) {
+    error->type = type;
+    error->info[0] = info0;
+    error->info[1] = info1;
 }
 
 void esett(Error *error, ErrorType type) {
-    if(error) error->type = type;
+    error->type = type;
 }
 
 char *etochar(ErrorType type) {

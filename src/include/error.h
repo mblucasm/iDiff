@@ -3,8 +3,8 @@
 
 #include <errno.h>
 
-#define __esettgoto(error, type, label) do {esett(error, type); goto label;} while(0)
-#define __esetgoto(error, type, label) do {eset(error, type, filePath, strerror(errno)); goto label;} while(0)
+#define esetgoto(errorp, type, info0, info1, label) do {eset(errorp, type, info0, info1); goto label;} while(0)
+#define esettgoto(errorp, type, label) do {esett(errorp, type); goto label;} while(0)
 
 typedef enum {
     ERROR_NO_ERROR,
@@ -22,7 +22,7 @@ typedef struct {
     const char *info[2];
 } Error;
 
-void eset(Error *error, ErrorType type, const char *filePath, const char *msg);
+void eset(Error *error, ErrorType type, const char *info0, const char *info1);
 void esett(Error *error, ErrorType type);
 char *etochar(ErrorType type);
 
