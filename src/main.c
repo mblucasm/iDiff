@@ -34,21 +34,31 @@
 
 #define DEFAULT_STREAM1 ("iDiff-list1.txt")
 #define DEFAULT_STREAM2 ("iDiff-list2.txt")
+#define METHOD_DEFAULT (METHOD_XA)
 
 #define FLAG_HELP     ("--help")
 #define FLAG_DUMPLIST ("--dump-list-")
 #define FLAG_DETAHELP ("--detailed-help")
 #define FLAG_IFOLDER  ("--instagram-folder=")
-#define FLAG_METHOD   ("--method") // @TODO: Work on this, you just did this
+#define FLAG_METHOD   ("--method=")
 
 #define FLAG_IFOLDERLEN  (sizeof(FLAG_IFOLDER) / sizeof(FLAG_IFOLDER[0]) - 1)
 #define FLAG_DUMPLISTLEN (sizeof(FLAG_DUMPLIST) / sizeof(FLAG_DUMPLIST[0]) - 1)
+#define FLAG_METHODLEN   (sizeof(FLAG_METHOD) / sizeof(FLAG_METHOD[0]) - 1)
 
 #define IPATH ("/connections/followers_and_following/")
 #define IPATHLEN (sizeof(IPATH) / sizeof(IPATH[0]) - 1)
 
+typedef enum {
+    METHOD_AA,
+    METHOD_AX,
+    METHOD_XA,
+    METHOD_UNKNOWN,
+} Method;
+
 typedef struct {
     bool ifolder;
+    Method method;
     const char *program;
     const char *paths[NFILES];
     FILE *list_streams[NFILES];
@@ -76,6 +86,8 @@ char *bufapps (Buf *buf, Slice slice);
 void buffree  (Buf *buf);
 
 void args_get_paths_from_folder(const char *args_paths[NFILES], Slice folder);
+Method get_method(const char *buf);
+const char *method_to_char(Method method);
 
 typedef struct {
     char *key;
@@ -127,6 +139,11 @@ int main(int argc, char **argv) {
 
     args_parse(&argc, &argv);
     if(!gargs.paths[0] || !gargs.paths[1]) {usage(); quit(1);}
+    if(gargs.method != METHOD_AA && gargs.method != METHOD_DEFAULT) {
+        const char *t = gargs.paths[0];
+        gargs.paths[0] = gargs.paths[1];
+        gargs.paths[1] = t;
+    }
     
     size_t file_len;
     char *file_contents = file_read(gargs.paths[0], &file_len);
@@ -190,12 +207,13 @@ void detahelp(void) {
 
 void usage(void) {
     printf(">> Usage:\n");
-    printf("."DELIM"idiff <<file1> <file2> | %s<folder_path>> [options]\n\n", FLAG_IFOLDER);
+    printf("."DELIM"idiff <<file1> <file2> | %s<folder>> [options]\n\n", FLAG_IFOLDER);
     printf("Options:\n");
-    printf("  %s             print this help message and quit\n", FLAG_HELP);
-    printf("  %s    print the detailed help message and quit\n", FLAG_DETAHELP);
-    printf("  %s1      dump the list 1 of instances to %s, if followed by =<file> (%s1=<file>) to a custom file \n", FLAG_DUMPLIST, DEFAULT_STREAMS[0], FLAG_DUMPLIST);
-    printf("  %s2      dump the list 2 of instances to %s, if followed by =<file> (%s2=<file>) to a custom file \n", FLAG_DUMPLIST, DEFAULT_STREAMS[1], FLAG_DUMPLIST);
+    printf("  %s                    print this help message and quit\n", FLAG_HELP);
+    printf("  %s           print the detailed help message and quit\n", FLAG_DETAHELP);
+    printf("  %s<method>         choose the method (default %s)\n", FLAG_METHOD, method_to_char(METHOD_DEFAULT));
+    printf("  %s1[=<file>]    dump the list 1 of instances to the <file>, if not provided default file is %s\n", FLAG_DUMPLIST, DEFAULT_STREAMS[0]);
+    printf("  %s2[=<file>]    dump the list 2 of instances to the <file>, if not provided default file is %s\n", FLAG_DUMPLIST, DEFAULT_STREAMS[1]);
 }
 
 bool starts_with(const char *buffer, size_t len, char *prefix, size_t plen) {
@@ -298,11 +316,24 @@ bool parse_dumplist(Slice arg) {
     } return true;
 }
 
+void parse_method(Slice arg) {
+    (void)sslice(&arg, '=', true);
+    if(arg.len == 0) {
+        fprintf(stderr, "[ERROR]: '%s' flag NEEDS to be followed by a method\n", FLAG_METHOD);
+        fprintf(stderr, "[ERROR]: This are: ");
+        for(size_t i = 0; i < METHOD_UNKNOWN; ++i) fprintf(stderr, "%s ", method_to_char(i));
+        fprintf(stderr, "\n[ERROR]: See ."DELIM"idiff %s\n", FLAG_HELP);
+        quit(1);
+    }
+    gargs.method = get_method(arg.ptr);
+}
+
 bool flag_parse(Slice arg) {
     if     (strcmp(arg.ptr, FLAG_HELP) == 0) {usage(); quit(0);}
     else if(strcmp(arg.ptr, FLAG_DETAHELP) == 0) {usage(); detahelp(); quit(0);}
     else if(starts_with(arg.ptr, arg.len, FLAG_DUMPLIST, FLAG_DUMPLISTLEN)) {if(!parse_dumplist(arg)) return false;}
     else if(starts_with(arg.ptr, arg.len, FLAG_IFOLDER, FLAG_IFOLDERLEN)) parse_ifolder(arg);
+    else if(starts_with(arg.ptr, arg.len, FLAG_METHOD, FLAG_METHODLEN)) parse_method(arg);
     else {
         fprintf(stderr, "[ERROR]: Unrecognized flag '%s' check the usage for help\n", arg.ptr);
         fprintf(stderr, "[ERROR]: To check the usage run ."DELIM"idiff %s\n", FLAG_HELP);
@@ -310,8 +341,26 @@ bool flag_parse(Slice arg) {
     } return true;
 }
 
+const char *method_to_char(Method method) {
+    switch(method) {
+        case METHOD_AA: return "AA";
+        case METHOD_AX: return "AX";
+        case METHOD_XA: return "XA";
+        case METHOD_UNKNOWN:
+        default: return NULL;
+    }
+}
+
+Method get_method(const char *buf) {
+    if(strcmp(buf, method_to_char(METHOD_AA)) == 0) return METHOD_AA;
+    if(strcmp(buf, method_to_char(METHOD_AX)) == 0) return METHOD_AX;
+    if(strcmp(buf, method_to_char(METHOD_XA)) == 0) return METHOD_XA;
+    return METHOD_UNKNOWN;
+}
+
 void args_parse(int *argc, char ***argv) {
     gargs = (Args){0};
+    gargs.method = METHOD_DEFAULT;
     gargs.program = arg_shift(argc, argv);
     while(*argc > 0) {
         Slice arg = snew(arg_shift(argc, argv));
@@ -456,7 +505,7 @@ size_t compar_to_file_raw(Dict *dict, const char *file_contents, size_t file_len
         if(name.len > 0) {
             bufputs(&buf, name);
             if(stream) fprintf(stream, "%zu >> %s\n", ++count2, buf.buf);
-            if(shgeti(dict, buf.buf) == -1) printf("%zu >> %.*s\n", ++count, (int)name.len, name.ptr);
+            if((gargs.method == METHOD_AA) ^ (shgeti(dict, buf.buf) == -1)) printf("%zu >> %.*s\n", ++count, (int)name.len, name.ptr);
         }
     } buffree(&buf);
     return count;
@@ -474,7 +523,7 @@ size_t compar_to_file_html(Dict *dict, const char *file_contents, size_t file_le
         if(name.len > 0) {
             bufputs(&buf, name);
             if(stream) fprintf(stream, "%zu >> %s\n", ++count2, buf.buf);
-            if(shgeti(dict, buf.buf) == -1) printf("%zu >> %.*s\n", ++count, (int)name.len, name.ptr);
+            if((gargs.method == METHOD_AA) ^ (shgeti(dict, buf.buf) == -1)) printf("%zu >> %.*s\n", ++count, (int)name.len, name.ptr);
         }
     } buffree(&buf);
     return count;
@@ -493,7 +542,7 @@ size_t compar_to_file_div(Dict *dict, const char *file_contents, size_t file_len
         if(name.len > 0) {
             bufputs(&buf, name);
             if(stream) fprintf(stream, "%zu >> %s\n", ++count2, buf.buf);
-            if(shgeti(dict, buf.buf) == -1) printf("%zu >> %.*s\n", ++count, (int)name.len, name.ptr);
+            if((gargs.method == METHOD_AA) ^ (shgeti(dict, buf.buf) == -1)) printf("%zu >> %.*s\n", ++count, (int)name.len, name.ptr);
         }
     } buffree(&buf);
     return count;
