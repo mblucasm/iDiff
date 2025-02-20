@@ -150,11 +150,10 @@ int main(int argc, char **argv) {
         case PREFIX_NONE: count = compar_to_file_raw(dict, file_contents, file_len, gargs.list_streams[1]); break;
         case PREFIX_HTML: count = compar_to_file_html(dict, file_contents, file_len, gargs.list_streams[1]); break;
         case PREFIX_DIV:  count = compar_to_file_div(dict, file_contents, file_len, gargs.list_streams[1]); break;
-    }
+    } free(file_contents);
     printf("=================NOT MATCHING LIST END=================\n");
     printf("Total mismatches = %zu\n", count);
 
-    free(file_contents);
     shfree(dict);
     buffree(&buf);
     for(size_t i = 0; i < NFILES; ++i) if(gargs.list_streams[i]) fclose(gargs.list_streams[i]);
@@ -276,33 +275,47 @@ void args_get_paths_from_folder(const char *args_paths[NFILES], Slice folder) {
     args_paths[1] = buf2.buf;
 }
 
+void parse_ifolder(Slice arg) {
+    gargs.ifolder = true;
+    (void)sslice(&arg, '=', true);
+    if(arg.len == 0) {
+        fprintf(stderr, "[ERROR]: '%s' flag NEEDS to be followed by a folder path\n", FLAG_IFOLDER);
+        quit(1);
+    } args_get_paths_from_folder(gargs.paths, arg);
+}
+
+bool parse_dumplist(Slice arg) {
+    if(!(arg.len == FLAG_DUMPLISTLEN || (arg.ptr[FLAG_DUMPLISTLEN] != '1' && arg.ptr[FLAG_DUMPLISTLEN] != '2'))) {
+        int target = arg.ptr[FLAG_DUMPLISTLEN] - '1';
+        if(gargs.list_streams[target]) fclose(gargs.list_streams[target]);
+        gargs.list_streams[target] = get_list_stream(arg, DEFAULT_STREAMS[target]);
+        if(gargs.list_streams[target] == NULL) return false;
+    } else {
+        fprintf(stderr, "[ERROR]: '%s' flag NEEDS to be followed by either a 1 or a 2: %s1 or %s2\n", FLAG_DUMPLIST, FLAG_DUMPLIST, FLAG_DUMPLIST);
+        fprintf(stderr, "[ERROR]: Aditionally it CAN be followed by =path, where path is the desired output path for that specific list\n");
+        quit(1);
+    } return true;
+}
+
+bool flag_parse(Slice arg) {
+    if     (strcmp(arg.ptr, FLAG_HELP) == 0) {usage(); quit(0);}
+    else if(strcmp(arg.ptr, FLAG_DETAHELP) == 0) {usage(); detahelp(); quit(0);}
+    else if(starts_with(arg.ptr, arg.len, FLAG_DUMPLIST, FLAG_DUMPLISTLEN) && !parse_dumplist(arg)) return false;
+    else if(starts_with(arg.ptr, arg.len, FLAG_IFOLDER, FLAG_IFOLDERLEN)) parse_ifolder(arg);
+    else {
+        fprintf(stderr, "[ERROR]: Unrecognized flag '%s' check the usage for help\n", arg.ptr);
+        fprintf(stderr, "[ERROR]: To check the usage run ."DELIM"idiff %s\n", FLAG_HELP);
+        quit(1);
+    } return true;
+}
+
 void args_parse(int *argc, char ***argv) {
     gargs = (Args){0};
     gargs.program = arg_shift(argc, argv);
     while(*argc > 0) {
         Slice arg = snew(arg_shift(argc, argv));
-        if(strcmp(arg.ptr, FLAG_HELP) == 0) {usage(); quit(0);}
-        else if(strcmp(arg.ptr, FLAG_DETAHELP) == 0) {usage(); detahelp(); quit(0);}
-        else if(starts_with(arg.ptr, arg.len, FLAG_IFOLDER, FLAG_IFOLDERLEN)) {
-            gargs.ifolder = true;
-            (void)sslice(&arg, '=', true);
-            if(arg.len > 0) args_get_paths_from_folder(gargs.paths, arg);
-            else {
-                fprintf(stderr, "[ERROR]: '%s' flag NEEDS to be followed by a folder path\n", FLAG_IFOLDER);
-                quit(1);
-            }
-        } else if(starts_with(arg.ptr, arg.len, FLAG_DUMPLIST, FLAG_DUMPLISTLEN)) {
-            if(!(arg.len == FLAG_DUMPLISTLEN || (arg.ptr[FLAG_DUMPLISTLEN] != '1' && arg.ptr[FLAG_DUMPLISTLEN] != '2'))) {
-                int target = arg.ptr[FLAG_DUMPLISTLEN] - '1';
-                if(gargs.list_streams[target]) fclose(gargs.list_streams[target]);
-                gargs.list_streams[target] = get_list_stream(arg, DEFAULT_STREAMS[target]);
-                if(gargs.list_streams[target] == NULL) goto defer;
-            } else {
-                fprintf(stderr, "[ERROR]: '%s' flag NEEDS to be followed by either a 1 or a 2: %s1 or %s2\n", FLAG_DUMPLIST, FLAG_DUMPLIST, FLAG_DUMPLIST);
-                fprintf(stderr, "[ERROR]: Aditionally it CAN be followed by =path, where path is the desired output path for that specific list\n");
-                quit(1);
-            }
-        } else if(!gargs.paths[0]) gargs.paths[0] = arg.ptr;
+        if(starts_with(arg.ptr, arg.len, "--", strlen("--")) && !flag_parse(arg)) goto defer;
+        else if(!gargs.paths[0]) gargs.paths[0] = arg.ptr;
         else gargs.paths[1] = arg.ptr;
     } return;
     defer:

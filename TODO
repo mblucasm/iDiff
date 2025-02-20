@@ -3,5 +3,4 @@
 - Maybe free and close things on elog, maybe on quit
 - Make functions return bool to indicate failure
 - Check for leaks fclose, free, ...
-- Make so --args get recognized as so and don't get treated as files if not typed correctly
 - Homogenize code
