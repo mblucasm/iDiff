@@ -39,6 +39,7 @@
 #define FLAG_DUMPLIST ("--dump-list-")
 #define FLAG_DETAHELP ("--detailed-help")
 #define FLAG_IFOLDER  ("--instagram-folder=")
+#define FLAG_METHOD   ("--method") // @TODO: Work on this, you just did this
 
 #define FLAG_IFOLDERLEN  (sizeof(FLAG_IFOLDER) / sizeof(FLAG_IFOLDER[0]) - 1)
 #define FLAG_DUMPLISTLEN (sizeof(FLAG_DUMPLIST) / sizeof(FLAG_DUMPLIST[0]) - 1)
@@ -300,7 +301,7 @@ bool parse_dumplist(Slice arg) {
 bool flag_parse(Slice arg) {
     if     (strcmp(arg.ptr, FLAG_HELP) == 0) {usage(); quit(0);}
     else if(strcmp(arg.ptr, FLAG_DETAHELP) == 0) {usage(); detahelp(); quit(0);}
-    else if(starts_with(arg.ptr, arg.len, FLAG_DUMPLIST, FLAG_DUMPLISTLEN) && !parse_dumplist(arg)) return false;
+    else if(starts_with(arg.ptr, arg.len, FLAG_DUMPLIST, FLAG_DUMPLISTLEN)) {if(!parse_dumplist(arg)) return false;}
     else if(starts_with(arg.ptr, arg.len, FLAG_IFOLDER, FLAG_IFOLDERLEN)) parse_ifolder(arg);
     else {
         fprintf(stderr, "[ERROR]: Unrecognized flag '%s' check the usage for help\n", arg.ptr);
@@ -314,7 +315,7 @@ void args_parse(int *argc, char ***argv) {
     gargs.program = arg_shift(argc, argv);
     while(*argc > 0) {
         Slice arg = snew(arg_shift(argc, argv));
-        if(starts_with(arg.ptr, arg.len, "--", strlen("--")) && !flag_parse(arg)) goto defer;
+        if(starts_with(arg.ptr, arg.len, "--", strlen("--"))) {if(!flag_parse(arg)) goto defer;}
         else if(!gargs.paths[0]) gargs.paths[0] = arg.ptr;
         else gargs.paths[1] = arg.ptr;
     } return;
