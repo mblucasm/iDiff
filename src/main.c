@@ -325,7 +325,15 @@ void parse_method(Slice arg) {
         fprintf(stderr, "\n[ERROR]: See ."DELIM"idiff %s\n", FLAG_HELP);
         quit(1);
     }
+    for(size_t i = 0; i < arg.len; ++i) ((char*)arg.ptr)[i] = toupper(arg.ptr[i]);
     gargs.method = get_method(arg.ptr);
+    if(gargs.method == METHOD_UNKNOWN) {
+        fprintf(stderr, "[ERROR]: Tried to set an UNKNOWN method, this was '%s'\n", arg.ptr);
+        fprintf(stderr, "[ERROR]: Valid methods are: ");
+        for(size_t i = 0; i < METHOD_UNKNOWN; ++i) fprintf(stderr, "%s ", method_to_char(i));
+        fprintf(stderr, "\n[ERROR]: See ."DELIM"idiff %s\n", FLAG_HELP);
+        quit(1);
+    }
 }
 
 bool flag_parse(Slice arg) {
